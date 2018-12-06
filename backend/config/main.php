@@ -67,6 +67,9 @@ return [
 	        'showScriptName' => false,
 	        'rules' => require (__DIR__ . '/routes.php'),
         ],
+        'componentHelper' => [
+	        'class' => 'backend\components\ComponentHelper'
+        ],
     ],
     'params' => $params,
 ];
