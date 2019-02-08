@@ -83,10 +83,21 @@ class UploadBehavior extends Behavior
     public $deleteTempFile = true;
 
     /**
-     * @var UploadedFile the uploaded file instance.
+     * @var UploadedFile[] the uploaded file instance.
      */
-    public $_file;
+    public $_files;
 
+    public $multiple = false;
+
+    public $serialized = false;
+
+    public $_value;
+
+
+    /**
+     * @var string replace|prepend|append
+     */
+    public $addType = 'prepend';
 
     /**
      * @inheritdoc
@@ -107,25 +118,62 @@ class UploadBehavior extends Behavior
     }
 
     /**
+     * @inheritdoc
+     */
+    public function events()
+    {
+        return [
+            BaseActiveRecord::EVENT_BEFORE_VALIDATE => 'beforeValidate',
+            BaseActiveRecord::EVENT_BEFORE_INSERT => 'beforeSave',
+            BaseActiveRecord::EVENT_BEFORE_UPDATE => 'beforeSave',
+            BaseActiveRecord::EVENT_AFTER_INSERT => 'afterSave',
+            BaseActiveRecord::EVENT_AFTER_UPDATE => 'afterSave',
+            BaseActiveRecord::EVENT_AFTER_DELETE => 'afterDelete',
+            BaseActiveRecord::EVENT_AFTER_FIND => 'afterFind',
+        ];
+    }
+
+    public function afterFind() {
+        /** @var BaseActiveRecord $model */
+        $model = $this->owner;
+
+        $model->setAttribute($this->attribute, $this->setValue($model->getAttribute($this->attribute)));
+    }
+
+    /**
      * This method is invoked before validation starts.
      */
     public function beforeValidate()
     {
         /** @var BaseActiveRecord $model */
         $model = $this->owner;
+
         if (in_array($model->scenario, $this->scenarios)) {
             if (($file = $model->getAttribute($this->attribute)) instanceof UploadedFile) {
-                $this->_file = $file;
+                $this->_files = $file;
             } else {
                 if ($this->instanceByName === true) {
-                    $this->_file = UploadedFile::getInstanceByName($this->attribute);
+                    $this->_files = $this->multiple ? UploadedFile::getInstancesByName($this->attribute) : UploadedFile::getInstanceByName($this->attribute);
                 } else {
-                    $this->_file = UploadedFile::getInstance($model, $this->attribute);
+                    $this->_files = $this->multiple ? UploadedFile::getInstances($model, $this->attribute) : UploadedFile::getInstance($model, $this->attribute);
                 }
             }
-            if ($this->_file instanceof UploadedFile) {
-                $this->_file->name = $this->getFileName($this->_file);
-                $model->setAttribute($this->attribute, $this->_file);
+
+            if (!is_array($this->_files)) {
+                $this->_files = [$this->_files];
+            }
+
+            $attributeValue = [];
+            foreach ($this->_files as $_file) {
+                if ($_file instanceof UploadedFile) {
+                    $_file->name = $this->getFileName($_file);
+                }
+
+                $attributeValue[] = $_file;
+            }
+
+            if ($attributeValue) {
+                $model->setAttribute($this->attribute, ($this->multiple ? $attributeValue : $attributeValue[0]));
             }
         }
     }
@@ -137,25 +185,58 @@ class UploadBehavior extends Behavior
     {
         /** @var BaseActiveRecord $model */
         $model = $this->owner;
+
         if (in_array($model->scenario, $this->scenarios)) {
-            if ($this->_file instanceof UploadedFile) {
-                if (!$model->getIsNewRecord() && $model->isAttributeChanged($this->attribute)) {
-                    if ($this->unlinkOnSave === true) {
-                        $this->delete($this->attribute, true);
+            $attributeValue = [];
+
+            foreach ($this->_files as $_file) {
+                if ($_file instanceof UploadedFile) {
+                    if (!$model->getIsNewRecord() && $model->isAttributeChanged($this->attribute)) {
+                        if ($this->unlinkOnSave === true) {
+                            /** TODO Удаление картинок при изменении */
+//                            $this->delete($this->attribute, true);
+                        }
                     }
+
+                    $attributeValue[] = $_file->name;
+                } else {
+                    // Protect attribute
+                    unset($model->{$this->attribute});
+                    return;
                 }
-                $model->setAttribute($this->attribute, $this->_file->name);
+            }
+
+            // Если не множественное - один файл
+            if ($this->multiple) {
+                if ($this->addType == 'prepend') {
+                    $attributeValue = array_merge($attributeValue, $this->setValue($model->getOldAttribute($this->attribute)));
+                } elseif ($this->addType == 'append') {
+                    $attributeValue = array_merge($this->setValue($model->getOldAttribute($this->attribute)), $attributeValue);
+                }
             } else {
-                // Protect attribute
+                $attributeValue = isset($attributeValue[0]) ? $attributeValue[0] : null;
+            }
+
+            // Сериализовать ли запись в БД
+            if ($this->serialized) {
+                $attributeValue = !empty($attributeValue) ? serialize($attributeValue) : null;
+            }
+
+            if ($attributeValue !== null) {
+                $model->setAttribute($this->attribute, $attributeValue);
+            } else {
                 unset($model->{$this->attribute});
             }
-        } else {
+        }
+
+        /** TODO Удаление картинок с заменной */
+        /*else {
             if (!$model->getIsNewRecord() && $model->isAttributeChanged($this->attribute)) {
                 if ($this->unlinkOnSave === true) {
                     $this->delete($this->attribute, true);
                 }
             }
-        }
+        }*/
     }
 
     /**
@@ -164,17 +245,32 @@ class UploadBehavior extends Behavior
      */
     public function afterSave()
     {
-        if ($this->_file instanceof UploadedFile) {
-            $path = $this->getUploadPath($this->attribute);
-            if (is_string($path) && FileHelper::createDirectory(dirname($path))) {
-                $this->save($this->_file, $path);
-                $this->afterUpload();
-            } else {
-                throw new InvalidArgumentException(
-                    "Directory specified in 'path' attribute doesn't exist or cannot be created."
-                );
+        $paths = $this->getUploadPath($this->attribute);
+
+        if (!is_array($paths)) {
+            $paths = [$paths];
+        }
+
+        if (!$this->_files) {
+            return;
+        }
+
+        foreach ($this->_files as $i => $_file) {
+            if ($_file instanceof UploadedFile) {
+                if (!isset($paths[$i])) {
+                    continue;
+                }
+                $path = $paths[$i];
+                if (is_string($path) && FileHelper::createDirectory(dirname($path))) {
+                    $this->save($_file, $path);
+                } else {
+                    throw new InvalidArgumentException(
+                        "Directory specified in '$path' attribute doesn't exist or cannot be created."
+                    );
+                }
             }
         }
+        $this->afterUpload();
     }
 
     /**
@@ -199,33 +295,77 @@ class UploadBehavior extends Behavior
         /** @var BaseActiveRecord $model */
         $model = $this->owner;
         $path = $this->resolvePath($this->path);
-        $fileName = ($old === true) ? $model->getOldAttribute($attribute) : $model->$attribute;
+        $fileName = ($old === true) ? $this->setValue($model->getOldAttribute($attribute)) : $model->$attribute;
 
-        return $fileName ? Yii::getAlias($path . '/' . $fileName) : null;
+        if (is_array($fileName)) {
+            $result = [];
+            foreach ($fileName as $fileNameItem) {
+                if ($fileNameItem) {
+                    $result[] = Yii::getAlias($path . '/' . $fileNameItem);
+                }
+            }
+        } else {
+            $result = Yii::getAlias($path . '/' . $fileName);
+        }
+
+        return $result;
     }
 
     /**
      * Returns file url for the attribute.
      * @param string $attribute
+     * @param boolean $old
      * @return string|null
      */
-    public function getUploadUrl($attribute)
+    public function getUploadUrl($attribute, $old = false)
     {
         /** @var BaseActiveRecord $model */
         $model = $this->owner;
         $url = $this->resolvePath($this->url);
-        $fileName = $model->getOldAttribute($attribute);
+        $fileName = ($old === true) ? $this->setValue($model->getOldAttribute($attribute)) : $model->$attribute;
 
-        return $fileName ? Yii::getAlias($url . '/' . $fileName) : null;
+        if (is_array($fileName)) {
+            $result = [];
+            foreach ($fileName as $fileNameItem) {
+                if ($fileNameItem) {
+                    $result[] = Yii::getAlias($url . '/' . $fileNameItem);
+                }
+            }
+        } else {
+            $result = Yii::getAlias($url . '/' . $fileName);
+        }
+
+        return $result;
+    }
+
+    public function getValue() {
+        return $this->_value;
+    }
+
+    public function setValue($value) {
+        if (null === $this->_value) {
+            if ($this->serialized) {
+                if (is_string($value)) {
+                    $value = unserialize($value);
+                }
+            }
+
+            if ($this->multiple && empty($value)) {
+                $value = [];
+            }
+
+            $this->_value = $value;
+        }
+        return $this->_value;
     }
 
     /**
      * Returns the UploadedFile instance.
-     * @return UploadedFile
+     * @return UploadedFile|UploadedFile[]
      */
     protected function getUploadedFile()
     {
-        return $this->_file;
+        return $this->_files;
     }
 
     /**
@@ -264,9 +404,11 @@ class UploadBehavior extends Behavior
      */
     protected function delete($attribute, $old = false)
     {
-        $path = $this->getUploadPath($attribute, $old);
-        if (is_file($path)) {
-            unlink($path);
+        $paths = $this->getUploadPath($attribute, $old);
+        foreach ($paths as $path) {
+            if (is_files($path)) {
+                unlink($path);
+            }
         }
     }
 

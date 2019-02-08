@@ -45,11 +45,6 @@ use yii\imagine\Image;
  */
 class UploadImageBehavior extends UploadBehavior
 {
-	/**
-	 * @event Event an event that is triggered after a file is uploaded.
-	 */
-	const EVENT_AFTER_UPLOAD = 'afterUpload';
-
     /**
      * @var string
      */
@@ -135,27 +130,30 @@ class UploadImageBehavior extends UploadBehavior
      */
     protected function createThumbs()
     {
-        $path = $this->getUploadPath($this->attribute);
-        if (!is_file($path)) {
-            return;
+        $paths = $this->getUploadPath($this->attribute);
+
+        if (!is_array($paths)) {
+            $paths = [$paths];
         }
-        
-        foreach ($this->thumbs as $profile => $config) {
-            $thumbPath = $this->getThumbUploadPath($this->attribute, $profile);
-            if ($thumbPath !== null) {
-                if (!FileHelper::createDirectory(dirname($thumbPath))) {
-                    throw new InvalidArgumentException(
-                        "Directory specified in 'thumbPath' attribute doesn't exist or cannot be created."
-                    );
-                }
-                if (!is_file($thumbPath)) {
-                    $this->generateImageThumb($config, $path, $thumbPath);
+
+        foreach ($paths as $path) {
+            foreach ($this->thumbs as $profile => $config) {
+                $thumbPath = $this->getThumbUploadPath($this->attribute, $profile);
+                if ($thumbPath !== null) {
+                    if (!FileHelper::createDirectory(dirname($thumbPath))) {
+                        throw new InvalidArgumentException(
+                            "Directory specified in 'thumbPath' attribute doesn't exist or cannot be created."
+                        );
+                    }
+                    if (!is_file($thumbPath)) {
+                        $this->generateImageThumb($config, $path, $thumbPath);
+                    }
                 }
             }
-        }
-        
-        if ($this->deleteOriginalFile) {
-            parent::delete($this->attribute);
+
+            /*if ($this->deleteOriginalFile) {
+                parent::delete($this->attribute);
+            }*/
         }
     }
 

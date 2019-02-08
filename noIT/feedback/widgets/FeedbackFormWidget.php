@@ -4,7 +4,8 @@ namespace noIT\feedback\widgets;
 
 use yii\base\Widget;
 
-class FeedbackFormWidget extends Widget {
+class FeedbackFormWidget extends Widget
+{
     public $view;
 
     public $modelClass = 'noIT\feedback\models\Feedback';
@@ -17,7 +18,7 @@ class FeedbackFormWidget extends Widget {
     {
         parent::init();
 
-        if (null === $this->model) {
+        if ($this->model === null) {
             $this->model = new $this->modelClass();
         }
     }

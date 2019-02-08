@@ -31,7 +31,6 @@ class DefaultController extends Controller
             /** @var Feedback $model */
             $model = new $modelName([
                 'adminEmailTo' => $module->adminEmails,
-
             ]);
 
             if ($model->load(Yii::$app->request->post())) {
@@ -59,6 +58,7 @@ class DefaultController extends Controller
             }
 
         } else {
+
             $modelName = base64_decode(Yii::$app->request->post('model', base64_encode(Feedback::className())));
 
             if (!class_exists($modelName)) {
@@ -66,9 +66,7 @@ class DefaultController extends Controller
             }
 
             /** @var Feedback $model */
-            $model = new $modelName([
-
-            ]);
+            $model = new $modelName([]);
 
             if ($model->load(Yii::$app->request->post())) {
 

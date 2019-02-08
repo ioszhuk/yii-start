@@ -80,7 +80,7 @@ class UploadsBehavior extends Behavior
         parent::attach($owner);
 
         foreach ($this->attributes as &$attribute) {
-            $attribute->owner = $this->owner;
+            $attribute->attach($this->owner);
         }
     }
 
@@ -89,7 +89,6 @@ class UploadsBehavior extends Behavior
             throw new ErrorException("Attribute {attribute} nt exists");
         }
         return $this->attributes[$attribute];
-//        return isset($this->attributes[$attribute]) ? $this->attributes[$attribute] : null;
     }
 
     /**
@@ -171,6 +170,10 @@ class UploadsBehavior extends Behavior
 
         return $_attribute->getUploadUrl($attribute);
     }
+
+//    public function getUploadedThumbs() {
+//
+//    }
 
     /**
      * Returns the UploadedFile instance.

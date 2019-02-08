@@ -18,6 +18,7 @@ use yii\behaviors\TimestampBehavior;
  * @property string $data
  * @property string $model
  * @property integer $status
+ * @property integer $is_subscribe
  * @property integer $created_at
  * @property integer $created_by
  * @property integer $updated_at
@@ -33,7 +34,6 @@ class Feedback extends \yii\db\ActiveRecord
 	public $_source;
 
 	public $service;
-	public $time_to_call;
 
 	public $subject = 'Обращение с сайта';
 
@@ -73,7 +73,7 @@ class Feedback extends \yii\db\ActiveRecord
 	public function behaviors()
 	{
 		return [
-			[
+			'timestamp' => [
 				'class' => TimestampBehavior::className()
 			],
 		];
@@ -85,14 +85,13 @@ class Feedback extends \yii\db\ActiveRecord
 	public function rules()
 	{
 		return [
-			[['service', 'time_to_call'], 'safe'],
 			[['date'], 'safe'],
 			[['message', 'data'], 'string'],
-			[['status', 'created_at', 'updated_at'], 'integer'],
+			[['status', 'is_subscribe', 'created_at', 'updated_at'], 'integer'],
 			[['ip'], 'string', 'max' => 20],
 			[['source'], 'string', 'max' => 150],
 			[['name', 'email', 'phone'], 'string', 'max' => 255],
-			[['model'], 'string', 'max' => 50],
+			[['model'], 'string', 'max' => 150],
 		];
 	}
 
@@ -114,13 +113,10 @@ class Feedback extends \yii\db\ActiveRecord
 			'model' => 'Модель',
 			'status' => 'Статус обращения',
 			'source' => 'Источник',
+			'is_subscribe' => 'Подписан на рассылку',
 			'created_at' => 'Дата',
 			'created_by' => 'Создано',
 		];
-	}
-
-	public function getSuccessfull() {
-		return $this->successfull;
 	}
 
 	public function setSource($source) {
@@ -148,11 +144,6 @@ class Feedback extends \yii\db\ActiveRecord
 
 	public function beforeSave($insert)
 	{
-
-		if(!is_null($this->service) && !is_null($this->time_to_call)) {
-			$this->data = "Услуга: $this->service | Время звонка: $this->time_to_call";
-		}
-
 		if (!$this->source) {
 			$this->source = Yii::$app->request->referrer;
 		}
@@ -164,25 +155,11 @@ class Feedback extends \yii\db\ActiveRecord
 
 	public function getEmailBody() {
 
-		if(!is_null($this->service) && !is_null($this->time_to_call)) {
-
-			return "Имя: $this->name\n".
-			       "Телефон: $this->phone\n".
-			       "Услуга:\n$this->service\n".
-			       "Время звонка: $this->time_to_call\n".
-			       "Источник: ". $this->getSource();
-
-		} else {
-
-			return "Имя: $this->name\n".
-			       "Email: $this->email\n".
-			       "Телефон: $this->phone\n".
-			       "Сообщение:\n$this->message\n".
-			       "Email: $this->email\n".
-			       "Источник: ". $this->getSource();
-
-		}
-
+		return "Имя: $this->name\n".
+		       "Телефон: $this->phone\n".
+		       "Email: $this->email\n".
+		       "Сообщение:\n$this->message\n".
+		       "Источник: ". $this->getSource();
 	}
 
 	public function sendEmail()
@@ -194,4 +171,5 @@ class Feedback extends \yii\db\ActiveRecord
 		                        ->setTextBody($this->getEmailBody())
 		                        ->send();
 	}
+
 }
