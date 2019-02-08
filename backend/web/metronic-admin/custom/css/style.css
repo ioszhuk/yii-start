@@ -25,7 +25,19 @@ label {
       font-weight: 700;
   }
 
+  .datepicker {
+      z-index: 99999 !important;
+  }
 
+.m-portlet {
+    -webkit-box-shadow:none;
+    box-shadow:none;
+    margin-bottom: 0;
+}
+
+.redactor-toolbar {
+    position: relative !important;
+}
 
 .btn {
   font-family: "Poppins", sans-serif; }
